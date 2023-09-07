@@ -136,8 +136,9 @@ jobs:
 
       - name: 'Az Login'
         run: |
-          echo "Login to Azure"
+          echo "Login to Azure & AKS"
           az login --service-principal -u ${{ env.ARM_CLIENT_ID }} -p ${{ env.ARM_CLIENT_SECRET }} --tenant ${{ env.ARM_TENANT_ID }}
+          az aks get-credentials --resource-group ${{ env.RG_BASE_NAME }} --name ${{ env.AKS_BASE_NAME }} --admin --overwrite-existing
         env:
           ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
@@ -146,20 +147,6 @@ jobs:
 
       - uses: azure/setup-kubectl@v3
         name: Setup kubectl
-
-      - name: Setup kubelogin
-        uses: azure/use-kubelogin@v1
-        with:
-          kubelogin-version: 'v0.0.29'
-
-      - name: Set AKS context
-        id: set-context
-        uses: azure/aks-set-context@v3
-        with:
-          resource-group: ${{ env.RG_BASE_NAME }} 
-          cluster-name: ${{ env.AKS_BASE_NAME }}
-          admin: 'false'
-          use-kubelogin: 'true'
 
       - name: Deploy image using Kustomize
         env:
