@@ -118,14 +118,14 @@ jobs:
   
       - name: 'Output vars'
         run: |
-          echo "${{ needs.initializing.outputs.RG_NAME }}"
-          echo "${{ needs.initializing.outputs.AKS_NAME }}"
-          echo "${{ needs.initializing.outputs.ACR_NAME }}"
+          echo "${{ env.RG_NAME }}"
+          echo "${{ env.AKS_NAME }}"
+          echo "${{ env.ACR_NAME }}"
 
       - name: ACR Login with AZ CLI
         id: image
         run: |
-          ACR_JSON=$(az acr login --name ${{ needs.initializing.outputs.ACR_NAME }} --expose-token)
+          ACR_JSON=$(az acr login --name ${{ env.ACR_NAME }} --expose-token)
           TOKEN=$(echo $ACR_JSON | jq -r .accessToken)
           LOGINSERVER=$(echo $ACR_JSON | jq -r .loginServer)
           echo "LOGINSERVER=$LOGINSERVER" >> $GITHUB_ENV
@@ -174,19 +174,19 @@ jobs:
         uses: azure/use-kubelogin@v1
         with:
           kubelogin-version: 'v0.0.29'
-          
+
       - name: 'Output vars'
         run: |
-          echo "${{ needs.initializing.outputs.RG_NAME }}"
-          echo "${{ needs.initializing.outputs.AKS_NAME }}"
-          echo "${{ needs.initializing.outputs.ACR_NAME }}"
+          echo "${{ env.RG_NAME }}"
+          echo "${{ env.AKS_NAME }}"
+          echo "${{ env.ACR_NAME }}"
 
       - name: Set AKS context
         id: set-context
         uses: azure/aks-set-context@v3
         with:
-          resource-group: ${{ needs.initializing.outputs.RG_NAME }} 
-          cluster-name: ${{ needs.initializing.outputs.AKS_NAME }}
+          resource-group: ${{ env.RG_NAME }} 
+          cluster-name: ${{ env.AKS_NAME }}
           admin: 'false'
           use-kubelogin: 'true'
 
