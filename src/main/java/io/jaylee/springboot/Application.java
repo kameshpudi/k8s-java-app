@@ -18,12 +18,15 @@ public class Application {
 	}
 }
 
-@RestController("/api/v1/hello")
+@RestController("/hello")
 class HelloController {
 
 	@GetMapping //("/api/v1/hello")
-	//@ResponseBody
-	public String hello(@RequestParam String name) {
-		return "Hello, did you know that " + name + " invented the car?";
+	public String hello() {
+	 return "Hello";
 	}
+	//@ResponseBody
+	// public String hello(@RequestParam String name) {
+	// 	return "Hello, did you know that " + name + " invented the car?";
+	// }
 }
