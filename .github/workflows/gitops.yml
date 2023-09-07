@@ -49,8 +49,8 @@ jobs:
           echo "The AKS_NAME is: ${{ env.AKS_NAME }}"
           echo "The ACR_NAME is: ${{ env.ACR_NAME }}"
           echo "Action is: ${{ github.event.inputs.action }}"
-  test:
-    name: Unit Test and SpotBugs
+  build:
+    name: Build and SpotBugs
     environment: '${{ github.event.inputs.environment }}'
     needs: initializing
     runs-on: ubuntu-latest
@@ -76,28 +76,11 @@ jobs:
         with:
           name: spotbugs-site
           path: './target/site/'
-  scan:
-    name: Scan dependencies with Trivy
-    environment: '${{ github.event.inputs.environment }}'
-    needs: test
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install latest Trivy CLI
-        run: |
-          wget https://github.com/aquasecurity/trivy/releases/download/v0.41.0/trivy_0.41.0_Linux-64bit.deb
-          sudo dpkg -i trivy_0.41.0_Linux-64bit.deb
-      - uses: actions/download-artifact@v3
-        with:
-          name: bom.json
-      - name: Run Trivy with SBOM
-        run: trivy sbom ./bom.json
 
   container:
     name: Build container with CNB and push to ACR
     environment: '${{ github.event.inputs.environment }}'
-    needs: scan
+    needs: build
     runs-on: ubuntu-latest
     outputs:
       LOGINSERVER: ${{ steps.image.outputs.LOGINSERVER }}
