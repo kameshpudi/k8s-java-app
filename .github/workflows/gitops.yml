@@ -50,7 +50,7 @@ jobs:
           echo "The ACR_NAME is: ${{ env.ACR_NAME }}"
           echo "Action is: ${{ github.event.inputs.action }}"
   build:
-    name: Build and SpotBugs
+    name: Build
     environment: '${{ github.event.inputs.environment }}'
     needs: initializing
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
           path: './target/site/'
 
   container:
-    name: Build container with CNB and push to ACR
+    name: Build container and push to ACR
     environment: '${{ github.event.inputs.environment }}'
     needs: build
     runs-on: ubuntu-latest
