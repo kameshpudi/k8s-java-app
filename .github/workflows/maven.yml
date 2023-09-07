@@ -23,7 +23,7 @@ env:
 
 jobs:
   initializing:
-    #environment: '${{ github.event.inputs.environment }}'
+    environment: '${{ github.event.inputs.environment }}'
     runs-on: [ ubuntu-latest ]
     outputs:
        RG_NAME: ${{ steps.setVars.outputs.RG_NAME }}
@@ -51,7 +51,7 @@ jobs:
           echo "Action is: ${{ github.event.inputs.action }}"
   test:
     name: Unit Test and SpotBugs
-    #environment: '${{ github.event.inputs.environment }}'
+    environment: '${{ github.event.inputs.environment }}'
     needs: initializing
     runs-on: ubuntu-latest
 
@@ -78,7 +78,7 @@ jobs:
           path: './target/site/'
   scan:
     name: Scan dependencies with Trivy
-    #environment: '${{ github.event.inputs.environment }}'
+    environment: '${{ github.event.inputs.environment }}'
     needs: test
     runs-on: ubuntu-latest
 
@@ -96,7 +96,7 @@ jobs:
 
   container:
     name: Build container with CNB and push to ACR
-    #environment: '${{ github.event.inputs.environment }}'
+    environment: '${{ github.event.inputs.environment }}'
     needs: scan
     runs-on: ubuntu-latest
     outputs:
@@ -106,12 +106,16 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: 'Az CLI Login'
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.ARM_CLIENT_ID }}
-          tenant-id: ${{ secrets.ARM_TENANT_ID }}
-          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      - name: 'Az Login'
+        run: |
+          echo "Login to Azure"
+          az login --service-principal -u ${{ env.ARM_CLIENT_ID }} -p ${{ env.ARM_CLIENT_SECRET }} --tenant ${{ env.ARM_TENANT_ID }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  
 
       - name: ACR Login with AZ CLI
         id: image
@@ -143,17 +147,20 @@ jobs:
   deployment:
     name: Deploy image to AKS
     needs: container
-    #environment: '${{ github.event.inputs.environment }}'
+    environment: '${{ github.event.inputs.environment }}'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: 'Az CLI Login'
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.ARM_CLIENT_ID }}
-          tenant-id: ${{ secrets.ARM_TENANT_ID }}
-          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      - name: 'Az Login'
+        run: |
+          echo "Login to Azure"
+          az login --service-principal -u ${{ env.ARM_CLIENT_ID }} -p ${{ env.ARM_CLIENT_SECRET }} --tenant ${{ env.ARM_TENANT_ID }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
       - uses: azure/setup-kubectl@v3
         name: Setup kubectl
