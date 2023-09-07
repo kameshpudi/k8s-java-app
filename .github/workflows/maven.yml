@@ -23,6 +23,7 @@ env:
 
 jobs:
   initializing:
+    environment: '${{ github.event.inputs.environment }}'
     runs-on: [ ubuntu-latest ]
     outputs:
        RG_NAME: ${{ steps.setVars.outputs.RG_NAME }}
@@ -50,6 +51,8 @@ jobs:
           echo "Action is: ${{ github.event.inputs.action }}"
   test:
     name: Unit Test and SpotBugs
+    environment: '${{ github.event.inputs.environment }}'
+    needs: initializing
     runs-on: ubuntu-latest
 
     steps:
@@ -75,6 +78,7 @@ jobs:
           path: './target/site/'
   scan:
     name: Scan dependencies with Trivy
+    environment: '${{ github.event.inputs.environment }}'
     needs: test
     runs-on: ubuntu-latest
 
@@ -92,9 +96,9 @@ jobs:
 
   container:
     name: Build container with CNB and push to ACR
+    environment: '${{ github.event.inputs.environment }}'
     needs: scan
     runs-on: ubuntu-latest
-    environment: '${{ github.event.inputs.environment }}'
     outputs:
       LOGINSERVER: ${{ steps.image.outputs.LOGINSERVER }}
       IMAGE: ${{ steps.versioning.outputs.IMAGE }}
@@ -139,8 +143,8 @@ jobs:
   deployment:
     name: Deploy image to AKS
     needs: container
-    runs-on: ubuntu-latest
     environment: '${{ github.event.inputs.environment }}'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
