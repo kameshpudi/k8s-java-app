@@ -16,11 +16,11 @@ public class Application {
 	}
 }
 
-@RestController("/hello")
+@RestController("/api/v1/hello")
 class HelloController {
 
 	@GetMapping
-	public String hello() {
-		return "Hello World!";
+	public String hello(@RequestParam String name) {
+		return "Hello, did you know that " + name + " invented the car?";
 	}
 }

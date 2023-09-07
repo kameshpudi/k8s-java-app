@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: k8s-java
-        image: weubenzacr.azurecr.io/k8s-java:1.0.0
+        image: k8s-java
         env:
         - name: name
           value: "Carl Benz"
