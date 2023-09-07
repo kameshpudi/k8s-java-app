@@ -1,0 +1,179 @@
+name: CI/CD Spring Boot to Azure Kubernetes Service
+
+on: 
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select the environment."
+        required: true
+        default: DEV
+        type: choice
+        options:
+          - DEV
+          - INT
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RG_BASE_NAME: 'weu-benz-iac-aks-rg'
+  AKS_BASE_NAME: 'weubenzaks'
+  ACR_BASE_NAME: 'weubenzacr'
+
+jobs:
+  initializing:
+    runs-on: [ ubuntu-latest ]
+    outputs:
+       RG_NAME: ${{ steps.setVars.outputs.RG_NAME }}
+       AKS_NAME: ${{ steps.setVars.outputs.AKS_NAME }}
+       ACR_NAME: ${{ steps.setVars.outputs.ACR_NAME }}
+    steps:
+      - name: 'Set environment variables env emea integration'
+        if: ${{ github.event.inputs.environment == 'DEV' }}
+        run: |
+          echo "RG_NAME=${{ env.RG_BASE_NAME }}" >> $GITHUB_ENV
+          echo "AKS_NAME=${{ env.AKS_BASE_NAME }}" >> $GITHUB_ENV
+          echo "ACR_NAME=${{ env.ACR_BASE_NAME }}" >> $GITHUB_ENV
+      - name: 'Expose values'
+        id: 'setVars'
+        run: |
+           echo "::set-output name=RG_NAME::${{ env.RG_NAME }}"
+           echo "::set-output name=AKS_NAME::${{ env.AKS_NAME }}"
+           echo "::set-output name=ACR_NAME::${{ env.ACR_NAME }}"
+      - name: Summary
+        run: |
+          echo "Summary of the initializing step"
+          echo "The RG_NAME is: ${{ env.RG_NAME }}"
+          echo "The AKS_NAME is: ${{ env.AKS_NAME }}"
+          echo "The ACR_NAME is: ${{ env.ACR_NAME }}"
+          echo "Action is: ${{ github.event.inputs.action }}"
+  test:
+    name: Unit Test and SpotBugs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'microsoft'
+          cache: 'maven'
+      ## Unit test and SBOM generation is carried out in 'mvn package', and SpotBugs report is generated in 'mvn site'
+      - name: Build with Maven
+        run: mvn -B clean package site
+      - name: Upload SBOM(Cyclonedx)
+        uses: actions/upload-artifact@v3
+        with:
+          name: bom.json
+          path: './target/bom.json'
+      - name: Upload SpotBugs Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: spotbugs-site
+          path: './target/site/'
+  scan:
+    name: Scan dependencies with Trivy
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install latest Trivy CLI
+        run: |
+          wget https://github.com/aquasecurity/trivy/releases/download/v0.41.0/trivy_0.41.0_Linux-64bit.deb
+          sudo dpkg -i trivy_0.41.0_Linux-64bit.deb
+      - uses: actions/download-artifact@v3
+        with:
+          name: bom.json
+      - name: Run Trivy with SBOM
+        run: trivy sbom ./bom.json
+
+  container:
+    name: Build container with CNB and push to ACR
+    needs: scan
+    runs-on: ubuntu-latest
+    environment: '${{ github.event.inputs.environment }}'
+    outputs:
+      LOGINSERVER: ${{ steps.image.outputs.LOGINSERVER }}
+      IMAGE: ${{ steps.versioning.outputs.IMAGE }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: 'Az CLI Login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: ACR Login with AZ CLI
+        id: image
+        run: |
+          ACR_JSON=$(az acr login --name ${{ needs.initializing.outputs.ACR_NAME }} --expose-token)
+          TOKEN=$(echo $ACR_JSON | jq -r .accessToken)
+          LOGINSERVER=$(echo $ACR_JSON | jq -r .loginServer)
+          echo "LOGINSERVER=$LOGINSERVER" >> $GITHUB_ENV
+          echo "LOGINSERVER=$LOGINSERVER" >> $GITHUB_OUTPUT
+          docker login ${LOGINSERVER} --username 00000000-0000-0000-0000-000000000000 --password-stdin <<< $TOKEN
+
+      - name: Install pack CLIs including pack and yq
+        uses: buildpacks/github-actions/setup-pack@v5.0.0
+        with:
+          pack-version: '0.29.0'
+
+      - name: Set the image name and version
+        id: versioning
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          REPO_NAME=${{ github.event.repository.name }}
+          echo "IMAGE=$REPO_NAME:$VERSION" >> $GITHUB_ENV
+          echo "IMAGE=$REPO_NAME:$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Pack build
+        run: |
+          pack build ${LOGINSERVER}/${IMAGE} --builder paketobuildpacks/builder:base --buildpack paketo-buildpacks/java-azure --env BP_JVM_VERSION=17 --publish
+
+  deployment:
+    name: Deploy image to AKS
+    needs: container
+    runs-on: ubuntu-latest
+    environment: '${{ github.event.inputs.environment }}'
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: 'Az CLI Login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - uses: azure/setup-kubectl@v3
+        name: Setup kubectl
+
+      - name: Setup kubelogin
+        uses: azure/use-kubelogin@v1
+        with:
+          kubelogin-version: 'v0.0.29'
+
+      - name: Set AKS context
+        id: set-context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ needs.initializing.outputs.RG_NAME }} 
+          cluster-name: ${{ needs.initializing.outputs.AKS_NAME }}
+          admin: 'false'
+          use-kubelogin: 'true'
+
+      - name: Deploy image using Kustomize
+        env:
+          IMAGE: ${{needs.container.outputs.IMAGE}}
+          LOGINSERVER: ${{needs.container.outputs.LOGINSERVER}}
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+          cd k8s
+          kustomize edit set image k8s-java=${LOGINSERVER}/${IMAGE}
+          kustomize build . | kubectl apply -f -
