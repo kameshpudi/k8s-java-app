@@ -16,10 +16,10 @@ public class Application {
 	}
 }
 
-@RestController("/hello")
+@RestController
 class HelloController {
 
-	@GetMapping
+	@GetMapping("/api/v1/hello")
 	public String hello() {
 		return "Hello World!";
 	}
